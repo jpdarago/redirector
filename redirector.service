@@ -1,0 +1,21 @@
+[Unit]
+Description=File-based URL redirector
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/redirector
+Environment=REDIRECT_DIR=/srv/redirects
+Environment=PORT=8080
+Restart=on-failure
+RestartSec=5
+
+DynamicUser=yes
+ReadOnlyPaths=/srv/redirects
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

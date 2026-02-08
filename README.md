@@ -44,6 +44,38 @@ Routes reload from disk every 100ms — add or remove files without restarting t
 REDIRECT_DIR=/srv/redirects go run .
 ```
 
+## Deployment
+
+Build the binary and copy it to the server:
+
+```sh
+go build -o redirector .
+sudo cp redirector /usr/local/bin/
+```
+
+Create the redirects directory:
+
+```sh
+sudo mkdir -p /srv/redirects
+```
+
+Install the systemd service:
+
+```sh
+sudo cp redirector.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now redirector
+```
+
+Check status and logs:
+
+```sh
+sudo systemctl status redirector
+sudo journalctl -u redirector -f
+```
+
+Edit `REDIRECT_DIR` and `PORT` in the service file to match your setup. The service runs with hardened settings (read-only filesystem, no root privileges, private /tmp).
+
 ## Development
 
 Requires [devenv](https://devenv.sh/):
