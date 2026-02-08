@@ -13,7 +13,11 @@ import (
 func loadRoutes(dir string) map[string]string {
 	routes := make(map[string]string)
 	filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
+		if err != nil {
+			log.Printf("walk error: %s: %v", path, err)
+			return nil
+		}
+		if d.IsDir() {
 			return nil
 		}
 		if filepath.Ext(path) != ".txt" {
@@ -21,6 +25,7 @@ func loadRoutes(dir string) map[string]string {
 		}
 		data, err := os.ReadFile(path)
 		if err != nil {
+			log.Printf("read error: %s: %v", path, err)
 			return nil
 		}
 		rel, _ := filepath.Rel(dir, path)
@@ -29,6 +34,12 @@ func loadRoutes(dir string) map[string]string {
 		return nil
 	})
 	return routes
+}
+
+func logRoutes(routes map[string]string) {
+	for key, target := range routes {
+		log.Printf("  %s -> %s", key, target)
+	}
 }
 
 func main() {
@@ -46,12 +57,19 @@ func main() {
 	initial := loadRoutes(dir)
 	routes.Store(&initial)
 	log.Printf("loaded %d routes from %s", len(initial), dir)
+	logRoutes(initial)
 
 	go func() {
+		prev := len(initial)
 		for {
 			time.Sleep(100 * time.Millisecond)
 			m := loadRoutes(dir)
 			routes.Store(&m)
+			if len(m) != prev {
+				log.Printf("reload: %d routes (was %d)", len(m), prev)
+				logRoutes(m)
+				prev = len(m)
+			}
 		}
 	}()
 
@@ -65,12 +83,14 @@ func main() {
 		m := *routes.Load()
 		target, ok := m[r.URL.Path]
 		if !ok {
+			log.Printf("%s %s -> 404", r.Method, r.URL.Path)
 			http.NotFound(w, r)
 			return
 		}
 		if !strings.Contains(target, "://") {
 			target = "https://" + target
 		}
+		log.Printf("%s %s -> 301 %s", r.Method, r.URL.Path, target)
 		http.Redirect(w, r, target, http.StatusMovedPermanently)
 	})
 
