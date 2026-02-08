@@ -42,6 +42,23 @@ func logRoutes(routes map[string]string) {
 	}
 }
 
+func redirectHandler(routes *atomic.Pointer[map[string]string]) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		m := *routes.Load()
+		target, ok := m[r.URL.Path]
+		if !ok {
+			log.Printf("%s %s -> 404", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		if !strings.Contains(target, "://") {
+			target = "https://" + target
+		}
+		log.Printf("%s %s -> 301 %s", r.Method, r.URL.Path, target)
+		http.Redirect(w, r, target, http.StatusMovedPermanently)
+	}
+}
+
 func main() {
 	dir := os.Getenv("REDIRECT_DIR")
 	if dir == "" {
@@ -79,20 +96,7 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
-		m := *routes.Load()
-		target, ok := m[r.URL.Path]
-		if !ok {
-			log.Printf("%s %s -> 404", r.Method, r.URL.Path)
-			http.NotFound(w, r)
-			return
-		}
-		if !strings.Contains(target, "://") {
-			target = "https://" + target
-		}
-		log.Printf("%s %s -> 301 %s", r.Method, r.URL.Path, target)
-		http.Redirect(w, r, target, http.StatusMovedPermanently)
-	})
+	mux.HandleFunc("GET /", redirectHandler(&routes))
 
 	addr := ":" + port
 	log.Printf("listening on %s", addr)
