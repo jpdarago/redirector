@@ -1,0 +1,9 @@
+# devenv
+.devenv/
+.devenv.flake.nix
+
+# direnv
+.direnv/
+
+# Go
+redirector
