@@ -53,6 +53,16 @@ go build -o redirector .
 sudo cp redirector /usr/local/bin/
 ```
 
+### Cross-compilation
+
+If you're building on a different OS or architecture (e.g. a NixOS laptop deploying to a Debian amd64 server), cross-compile and copy the binary over:
+
+```sh
+GOOS=linux GOARCH=amd64 go build -o redirector .
+scp redirector your-server:/tmp/
+ssh your-server 'sudo mv /tmp/redirector /usr/local/bin/ && sudo systemctl restart redirector'
+```
+
 Create the redirects directory:
 
 ```sh
