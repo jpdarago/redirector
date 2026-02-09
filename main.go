@@ -1,11 +1,13 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -42,6 +44,33 @@ func loadRoutes(dir string) map[string]string {
 func logRoutes(routes map[string]string) {
 	for key, target := range routes {
 		log.Printf("  %s -> %s", key, target)
+	}
+}
+
+func listHandler(routes *atomic.Pointer[map[string]string]) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		m := *routes.Load()
+		keys := make([]string, 0, len(m))
+		for k := range m {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+
+		var buf strings.Builder
+		buf.WriteString("<!DOCTYPE html><html><head><title>Redirects</title></head><body>")
+		buf.WriteString("<h1>Available Redirects</h1><ul>")
+		for _, k := range keys {
+			target := m[k]
+			href := target
+			if !strings.Contains(href, "://") {
+				href = "https://" + href
+			}
+			buf.WriteString(fmt.Sprintf("<li><a href=\"%s\">%s</a> &rarr; %s</li>", k, k, href))
+		}
+		buf.WriteString("</ul></body></html>")
+
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprint(w, buf.String())
 	}
 }
 
@@ -104,6 +133,7 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /{$}", listHandler(&routes))
 	mux.HandleFunc("GET /", redirectHandler(&routes))
 
 	addr := ":" + port

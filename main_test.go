@@ -163,6 +163,68 @@ func TestRedirectHandlerAcceptsValidPaths(t *testing.T) {
 	}
 }
 
+func TestListHandler(t *testing.T) {
+	var routes atomic.Pointer[map[string]string]
+	m := map[string]string{
+		"/b":   "google.com",
+		"/a":   "https://example.com",
+		"/c/d": "github.com/foo",
+	}
+	routes.Store(&m)
+
+	handler := listHandler(&routes)
+	req := httptest.NewRequest("GET", "/", nil)
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	ct := rec.Header().Get("Content-Type")
+	if !strings.Contains(ct, "text/html") {
+		t.Errorf("Content-Type = %q, want text/html", ct)
+	}
+	body := rec.Body.String()
+	// Check routes appear in sorted order
+	aIdx := strings.Index(body, "/a")
+	bIdx := strings.Index(body, "/b")
+	cdIdx := strings.Index(body, "/c/d")
+	if aIdx == -1 || bIdx == -1 || cdIdx == -1 {
+		t.Fatalf("missing routes in body: %s", body)
+	}
+	if aIdx > bIdx || bIdx > cdIdx {
+		t.Error("routes not sorted alphabetically")
+	}
+	// Check targets are present
+	if !strings.Contains(body, "https://google.com") {
+		t.Error("missing https://google.com in body")
+	}
+	if !strings.Contains(body, "https://example.com") {
+		t.Error("missing https://example.com in body")
+	}
+	if !strings.Contains(body, "https://github.com/foo") {
+		t.Error("missing https://github.com/foo in body")
+	}
+}
+
+func TestListHandlerEmpty(t *testing.T) {
+	var routes atomic.Pointer[map[string]string]
+	m := map[string]string{}
+	routes.Store(&m)
+
+	handler := listHandler(&routes)
+	req := httptest.NewRequest("GET", "/", nil)
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if !strings.Contains(rec.Body.String(), "<ul></ul>") {
+		t.Error("expected empty list")
+	}
+}
+
 func TestRedirectHandlerPreservesScheme(t *testing.T) {
 	var routes atomic.Pointer[map[string]string]
 	m := map[string]string{
