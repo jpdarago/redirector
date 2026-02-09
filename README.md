@@ -76,6 +76,28 @@ sudo journalctl -u redirector -f
 
 Edit `REDIRECT_DIR` and `PORT` in the service file to match your setup. The service runs with hardened settings (read-only filesystem, no root privileges, private /tmp).
 
+### nginx reverse proxy
+
+To serve the redirector under the `/go/` route of an existing nginx site, add the following to your server block:
+
+```nginx
+location /go/ {
+    proxy_pass http://127.0.0.1:8080/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+The trailing slash on both `location /go/` and `proxy_pass http://127.0.0.1:8080/` is important — it strips the `/go/` prefix so that `/go/a` is forwarded to the redirector as `/a`.
+
+Test and reload nginx:
+
+```sh
+sudo nginx -t && sudo systemctl reload nginx
+```
+
 ## Development
 
 Requires [devenv](https://devenv.sh/):
