@@ -58,7 +58,7 @@ sudo cp redirector /usr/local/bin/
 If you're building on a different OS or architecture (e.g. a NixOS laptop deploying to a Debian amd64 server), cross-compile and copy the binary over:
 
 ```sh
-GOOS=linux GOARCH=amd64 go build -o redirector .
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o redirector .
 scp redirector your-server:/tmp/
 ssh your-server 'sudo mv /tmp/redirector /usr/local/bin/ && sudo systemctl restart redirector'
 ```
@@ -67,7 +67,11 @@ Create the redirects directory:
 
 ```sh
 sudo mkdir -p /srv/redirects
+sudo chown "$USER:$USER" /srv/redirects
+sudo chmod o+rX /srv/redirects
 ```
+
+This makes your user the owner (so you can add and edit redirect files) while keeping the directory readable by the service, which runs as a sandboxed dynamic user.
 
 Install the systemd service:
 
