@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 )
@@ -103,6 +104,62 @@ func TestRedirectHandler(t *testing.T) {
 				t.Errorf("%s: Location = %q, want %q", tt.path, got, tt.wantTarget)
 			}
 		}
+	}
+}
+
+func TestRedirectHandlerRejectsInvalidPaths(t *testing.T) {
+	var routes atomic.Pointer[map[string]string]
+	m := map[string]string{}
+	routes.Store(&m)
+
+	handler := redirectHandler(&routes)
+
+	tests := []struct {
+		name string
+		path string
+	}{
+		{"dots", "/go/hello.world"},
+		{"special chars", "/go/a@b"},
+		{"trailing slash", "/go/a/"},
+		{"bare slash", "/"},
+		{"too long", "/" + strings.Repeat("a", 64)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/valid", nil)
+			req.URL.Path = tt.path
+			rec := httptest.NewRecorder()
+			handler(rec, req)
+			if rec.Code != http.StatusBadRequest {
+				t.Errorf("%s: status = %d, want %d", tt.path, rec.Code, http.StatusBadRequest)
+			}
+		})
+	}
+}
+
+func TestRedirectHandlerAcceptsValidPaths(t *testing.T) {
+	var routes atomic.Pointer[map[string]string]
+	m := map[string]string{
+		"/go/github":       "github.com",
+		"/go/my-repo":      "github.com/my-repo",
+		"/go/my_repo":      "github.com/my_repo",
+		"/go/ABC-123_test": "example.com",
+		"/a/b/c":           "example.com",
+	}
+	routes.Store(&m)
+
+	handler := redirectHandler(&routes)
+
+	for path := range m {
+		t.Run(path, func(t *testing.T) {
+			req := httptest.NewRequest("GET", path, nil)
+			rec := httptest.NewRecorder()
+			handler(rec, req)
+			if rec.Code != http.StatusMovedPermanently {
+				t.Errorf("%s: status = %d, want %d", path, rec.Code, http.StatusMovedPermanently)
+			}
+		})
 	}
 }
 

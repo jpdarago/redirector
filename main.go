@@ -5,10 +5,13 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"time"
 )
+
+var validPath = regexp.MustCompile(`^/[a-zA-Z0-9_-]+(/[a-zA-Z0-9_-]+)*$`)
 
 func loadRoutes(dir string) map[string]string {
 	routes := make(map[string]string)
@@ -44,6 +47,11 @@ func logRoutes(routes map[string]string) {
 
 func redirectHandler(routes *atomic.Pointer[map[string]string]) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if len(r.URL.Path) > 64 || !validPath.MatchString(r.URL.Path) {
+			log.Printf("%s %s -> 400 invalid path", r.Method, r.URL.Path)
+			http.Error(w, "invalid path", http.StatusBadRequest)
+			return
+		}
 		m := *routes.Load()
 		target, ok := m[r.URL.Path]
 		if !ok {
