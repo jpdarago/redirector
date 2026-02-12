@@ -35,7 +35,7 @@ var validPath = regexp.MustCompile(`^/[a-zA-Z0-9_-]+(/[a-zA-Z0-9_-]+)*$`)
 
 func loadRoutes(dir string) map[string]string {
 	routes := make(map[string]string)
-	filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			log.Printf("walk error: %s: %v", path, err)
 			return nil
@@ -84,7 +84,9 @@ func listHandler(routes *atomic.Pointer[map[string]string]) http.HandlerFunc {
 		}
 
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		listTmpl.Execute(w, data)
+		if err := listTmpl.Execute(w, data); err != nil {
+			log.Printf("template error: %v", err)
+		}
 	}
 }
 

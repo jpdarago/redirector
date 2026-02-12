@@ -15,8 +15,12 @@ func setupTestDir(t *testing.T, files map[string]string) string {
 	dir := t.TempDir()
 	for path, content := range files {
 		full := filepath.Join(dir, path)
-		os.MkdirAll(filepath.Dir(full), 0o755)
-		os.WriteFile(full, []byte(content), 0o644)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 	return dir
 }
