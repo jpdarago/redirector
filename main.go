@@ -1,21 +1,41 @@
 package main
 
 import (
+	"html/template"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"time"
 )
 
+type route struct {
+	Path string
+	Href string
+}
+
+const listHTML = `<!DOCTYPE html>
+<html>
+<head><title>Redirects</title></head>
+<body>
+<h1>Available Redirects</h1>
+<ul>{{range .}}
+<li><a href="{{.Path}}">{{.Path}}</a> &rarr; {{.Href}}</li>{{end}}
+</ul>
+</body>
+</html>`
+
+var listTmpl = template.Must(template.New("list").Parse(listHTML))
+
 var validPath = regexp.MustCompile(`^/[a-zA-Z0-9_-]+(/[a-zA-Z0-9_-]+)*$`)
 
 func loadRoutes(dir string) map[string]string {
 	routes := make(map[string]string)
-	filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			log.Printf("walk error: %s: %v", path, err)
 			return nil
@@ -42,6 +62,31 @@ func loadRoutes(dir string) map[string]string {
 func logRoutes(routes map[string]string) {
 	for key, target := range routes {
 		log.Printf("  %s -> %s", key, target)
+	}
+}
+
+func listHandler(routes *atomic.Pointer[map[string]string]) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		m := *routes.Load()
+		keys := make([]string, 0, len(m))
+		for k := range m {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+
+		data := make([]route, 0, len(keys))
+		for _, k := range keys {
+			href := m[k]
+			if !strings.Contains(href, "://") {
+				href = "https://" + href
+			}
+			data = append(data, route{Path: k, Href: href})
+		}
+
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := listTmpl.Execute(w, data); err != nil {
+			log.Printf("template error: %v", err)
+		}
 	}
 }
 
@@ -104,6 +149,7 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /{$}", listHandler(&routes))
 	mux.HandleFunc("GET /", redirectHandler(&routes))
 
 	addr := ":" + port
