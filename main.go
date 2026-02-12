@@ -31,7 +31,7 @@ const listHTML = `<!DOCTYPE html>
 
 var listTmpl = template.Must(template.New("list").Parse(listHTML))
 
-var validPath = regexp.MustCompile(`^/[a-zA-Z0-9_-]+(/[a-zA-Z0-9_-]+)*$`)
+var validPath = regexp.MustCompile(`^/[a-zA-Z0-9_-]+(/[a-zA-Z0-9_-]+)*/?$`)
 
 func loadRoutes(dir string) map[string]string {
 	routes := make(map[string]string)
@@ -52,7 +52,16 @@ func loadRoutes(dir string) map[string]string {
 			return nil
 		}
 		rel, _ := filepath.Rel(dir, path)
-		key := "/" + strings.TrimSuffix(rel, ".txt")
+		name := strings.TrimSuffix(rel, ".txt")
+		if filepath.Base(name) == "_index" {
+			parent := filepath.Dir(name)
+			if parent == "." {
+				// Root _index.txt would map to "/", skip it since that's the listing page
+				return nil
+			}
+			name = parent
+		}
+		key := "/" + name
 		routes[key] = strings.TrimSpace(string(data))
 		return nil
 	})
@@ -98,7 +107,8 @@ func redirectHandler(routes *atomic.Pointer[map[string]string]) http.HandlerFunc
 			return
 		}
 		m := *routes.Load()
-		target, ok := m[r.URL.Path]
+		lookupPath := strings.TrimRight(r.URL.Path, "/")
+		target, ok := m[lookupPath]
 		if !ok {
 			log.Printf("%s %s -> 404", r.Method, r.URL.Path)
 			http.NotFound(w, r)
