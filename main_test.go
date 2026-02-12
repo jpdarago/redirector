@@ -124,7 +124,6 @@ func TestRedirectHandlerRejectsInvalidPaths(t *testing.T) {
 	}{
 		{"dots", "/go/hello.world"},
 		{"special chars", "/go/a@b"},
-		{"trailing slash", "/go/a/"},
 		{"bare slash", "/"},
 		{"too long", "/" + strings.Repeat("a", 64)},
 	}
@@ -150,12 +149,20 @@ func TestRedirectHandlerAcceptsValidPaths(t *testing.T) {
 		"/go/my_repo":      "github.com/my_repo",
 		"/go/ABC-123_test": "example.com",
 		"/a/b/c":           "example.com",
+		"/go/todo":         "example.com/todo",
 	}
 	routes.Store(&m)
 
 	handler := redirectHandler(&routes)
 
-	for path := range m {
+	paths := make([]string, 0, len(m)+1)
+	for p := range m {
+		paths = append(paths, p)
+	}
+	// Also test a trailing-slash variant
+	paths = append(paths, "/go/todo/")
+
+	for _, path := range paths {
 		t.Run(path, func(t *testing.T) {
 			req := httptest.NewRequest("GET", path, nil)
 			rec := httptest.NewRecorder()
@@ -176,7 +183,7 @@ func TestListHandler(t *testing.T) {
 	}
 	routes.Store(&m)
 
-	handler := listHandler(&routes)
+	handler := listHandler(&routes, "")
 	req := httptest.NewRequest("GET", "/", nil)
 	rec := httptest.NewRecorder()
 	handler(rec, req)
@@ -216,7 +223,7 @@ func TestListHandlerEmpty(t *testing.T) {
 	m := map[string]string{}
 	routes.Store(&m)
 
-	handler := listHandler(&routes)
+	handler := listHandler(&routes, "")
 	req := httptest.NewRequest("GET", "/", nil)
 	rec := httptest.NewRecorder()
 	handler(rec, req)
@@ -226,6 +233,110 @@ func TestListHandlerEmpty(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "<ul>\n</ul>") {
 		t.Error("expected empty list")
+	}
+}
+
+func TestListHandlerBasePath(t *testing.T) {
+	var routes atomic.Pointer[map[string]string]
+	m := map[string]string{
+		"/a": "google.com",
+	}
+	routes.Store(&m)
+
+	handler := listHandler(&routes, "/go")
+	req := httptest.NewRequest("GET", "/", nil)
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+
+	body := rec.Body.String()
+	if !strings.Contains(body, `href="/go/a"`) {
+		t.Errorf("expected href with base path /go, got: %s", body)
+	}
+	if !strings.Contains(body, `>/go/a<`) {
+		t.Errorf("expected link text with base path /go, got: %s", body)
+	}
+}
+
+func TestLoadRoutesIndexFile(t *testing.T) {
+	dir := setupTestDir(t, map[string]string{
+		"todo/_index.txt":       "todoist.com",
+		"work/tools/_index.txt": "tools.example.com",
+		"a.txt":                 "google.com",
+	})
+
+	routes := loadRoutes(dir)
+
+	tests := map[string]string{
+		"/todo":       "todoist.com",
+		"/work/tools": "tools.example.com",
+		"/a":          "google.com",
+	}
+	for key, want := range tests {
+		got, ok := routes[key]
+		if !ok {
+			t.Errorf("missing route %s", key)
+		} else if got != want {
+			t.Errorf("route %s = %q, want %q", key, got, want)
+		}
+	}
+	if _, ok := routes["/todo/_index"]; ok {
+		t.Error("_index.txt should not create a /_index route")
+	}
+	if len(routes) != len(tests) {
+		t.Errorf("got %d routes, want %d", len(routes), len(tests))
+	}
+}
+
+func TestLoadRoutesRootIndexSkipped(t *testing.T) {
+	dir := setupTestDir(t, map[string]string{
+		"_index.txt": "example.com",
+		"a.txt":      "google.com",
+	})
+
+	routes := loadRoutes(dir)
+
+	if _, ok := routes["/"]; ok {
+		t.Error("root _index.txt should be skipped")
+	}
+	if len(routes) != 1 {
+		t.Errorf("got %d routes, want 1", len(routes))
+	}
+}
+
+func TestRedirectHandlerTrailingSlash(t *testing.T) {
+	var routes atomic.Pointer[map[string]string]
+	m := map[string]string{
+		"/a":   "google.com",
+		"/b/c": "example.com",
+	}
+	routes.Store(&m)
+
+	handler := redirectHandler(&routes)
+
+	tests := []struct {
+		path       string
+		wantCode   int
+		wantTarget string
+	}{
+		{"/a/", http.StatusMovedPermanently, "https://google.com"},
+		{"/b/c/", http.StatusMovedPermanently, "https://example.com"},
+		{"/nope/", http.StatusNotFound, ""},
+	}
+
+	for _, tt := range tests {
+		req := httptest.NewRequest("GET", tt.path, nil)
+		rec := httptest.NewRecorder()
+		handler(rec, req)
+
+		if rec.Code != tt.wantCode {
+			t.Errorf("%s: status = %d, want %d", tt.path, rec.Code, tt.wantCode)
+		}
+		if tt.wantTarget != "" {
+			got := rec.Header().Get("Location")
+			if got != tt.wantTarget {
+				t.Errorf("%s: Location = %q, want %q", tt.path, got, tt.wantTarget)
+			}
+		}
 	}
 }
 

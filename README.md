@@ -12,9 +12,11 @@ Given a directory like:
 ├── b/
 │   ├── c.txt      # contains "amazon.com"
 │   └── d.txt      # contains "facebook.com"
-└── e/
-    └── f/
-        └── g.txt  # contains "youtube.com"
+├── e/
+│   └── f/
+│       └── g.txt  # contains "youtube.com"
+└── todo/
+    └── _index.txt # contains "todoist.com"
 ```
 
 The server produces these redirects:
@@ -25,9 +27,15 @@ The server produces these redirects:
 | `GET /b/c` | `https://amazon.com` |
 | `GET /b/d` | `https://facebook.com` |
 | `GET /e/f/g` | `https://youtube.com` |
+| `GET /todo` | `https://todoist.com` |
+| `GET /todo/` | `https://todoist.com` |
 | anything else | 404 |
 
 URLs without a scheme get `https://` prepended automatically. URLs that already contain `://` are used as-is.
+
+Trailing slashes are accepted — `GET /a/` resolves the same as `GET /a`.
+
+A file named `_index.txt` acts as a directory index: its parent directory becomes the route key. This lets you use `todo/_index.txt` to handle requests to `/todo`. A root-level `_index.txt` is ignored since `/` serves the route listing page.
 
 Routes reload from disk every 100ms — add or remove files without restarting the server.
 

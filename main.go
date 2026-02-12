@@ -31,7 +31,7 @@ const listHTML = `<!DOCTYPE html>
 
 var listTmpl = template.Must(template.New("list").Parse(listHTML))
 
-var validPath = regexp.MustCompile(`^/[a-zA-Z0-9_-]+(/[a-zA-Z0-9_-]+)*$`)
+var validPath = regexp.MustCompile(`^/[a-zA-Z0-9_-]+(/[a-zA-Z0-9_-]+)*/?$`)
 
 func loadRoutes(dir string) map[string]string {
 	routes := make(map[string]string)
@@ -52,7 +52,16 @@ func loadRoutes(dir string) map[string]string {
 			return nil
 		}
 		rel, _ := filepath.Rel(dir, path)
-		key := "/" + strings.TrimSuffix(rel, ".txt")
+		name := strings.TrimSuffix(rel, ".txt")
+		if filepath.Base(name) == "_index" {
+			parent := filepath.Dir(name)
+			if parent == "." {
+				// Root _index.txt would map to "/", skip it since that's the listing page
+				return nil
+			}
+			name = parent
+		}
+		key := "/" + name
 		routes[key] = strings.TrimSpace(string(data))
 		return nil
 	})
@@ -65,7 +74,7 @@ func logRoutes(routes map[string]string) {
 	}
 }
 
-func listHandler(routes *atomic.Pointer[map[string]string]) http.HandlerFunc {
+func listHandler(routes *atomic.Pointer[map[string]string], basePath string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		m := *routes.Load()
 		keys := make([]string, 0, len(m))
@@ -80,7 +89,7 @@ func listHandler(routes *atomic.Pointer[map[string]string]) http.HandlerFunc {
 			if !strings.Contains(href, "://") {
 				href = "https://" + href
 			}
-			data = append(data, route{Path: k, Href: href})
+			data = append(data, route{Path: basePath + k, Href: href})
 		}
 
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -98,7 +107,8 @@ func redirectHandler(routes *atomic.Pointer[map[string]string]) http.HandlerFunc
 			return
 		}
 		m := *routes.Load()
-		target, ok := m[r.URL.Path]
+		lookupPath := strings.TrimRight(r.URL.Path, "/")
+		target, ok := m[lookupPath]
 		if !ok {
 			log.Printf("%s %s -> 404", r.Method, r.URL.Path)
 			http.NotFound(w, r)
@@ -143,13 +153,15 @@ func main() {
 		}
 	}()
 
+	basePath := os.Getenv("BASE_PATH")
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /{$}", listHandler(&routes))
+	mux.HandleFunc("GET /{$}", listHandler(&routes, basePath))
 	mux.HandleFunc("GET /", redirectHandler(&routes))
 
 	addr := ":" + port
