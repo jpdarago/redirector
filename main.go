@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"html/template"
 	"log"
 	"net/http"
 	"os"
@@ -12,6 +12,17 @@ import (
 	"sync/atomic"
 	"time"
 )
+
+type route struct {
+	Path string
+	Href string
+}
+
+var listTmpl = template.Must(template.New("list").Parse(
+	`<!DOCTYPE html><html><head><title>Redirects</title></head><body>` +
+		`<h1>Available Redirects</h1><ul>` +
+		`{{range .}}<li><a href="{{.Path}}">{{.Path}}</a> &rarr; {{.Href}}</li>{{end}}` +
+		`</ul></body></html>`))
 
 var validPath = regexp.MustCompile(`^/[a-zA-Z0-9_-]+(/[a-zA-Z0-9_-]+)*$`)
 
@@ -56,21 +67,17 @@ func listHandler(routes *atomic.Pointer[map[string]string]) http.HandlerFunc {
 		}
 		sort.Strings(keys)
 
-		var buf strings.Builder
-		buf.WriteString("<!DOCTYPE html><html><head><title>Redirects</title></head><body>")
-		buf.WriteString("<h1>Available Redirects</h1><ul>")
+		data := make([]route, 0, len(keys))
 		for _, k := range keys {
-			target := m[k]
-			href := target
+			href := m[k]
 			if !strings.Contains(href, "://") {
 				href = "https://" + href
 			}
-			buf.WriteString(fmt.Sprintf("<li><a href=\"%s\">%s</a> &rarr; %s</li>", k, k, href))
+			data = append(data, route{Path: k, Href: href})
 		}
-		buf.WriteString("</ul></body></html>")
 
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		fmt.Fprint(w, buf.String())
+		listTmpl.Execute(w, data)
 	}
 }
 
