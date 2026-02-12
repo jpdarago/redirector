@@ -18,11 +18,18 @@ type route struct {
 	Href string
 }
 
-var listTmpl = template.Must(template.New("list").Parse(
-	`<!DOCTYPE html><html><head><title>Redirects</title></head><body>` +
-		`<h1>Available Redirects</h1><ul>` +
-		`{{range .}}<li><a href="{{.Path}}">{{.Path}}</a> &rarr; {{.Href}}</li>{{end}}` +
-		`</ul></body></html>`))
+const listHTML = `<!DOCTYPE html>
+<html>
+<head><title>Redirects</title></head>
+<body>
+<h1>Available Redirects</h1>
+<ul>{{range .}}
+<li><a href="{{.Path}}">{{.Path}}</a> &rarr; {{.Href}}</li>{{end}}
+</ul>
+</body>
+</html>`
+
+var listTmpl = template.Must(template.New("list").Parse(listHTML))
 
 var validPath = regexp.MustCompile(`^/[a-zA-Z0-9_-]+(/[a-zA-Z0-9_-]+)*$`)
 

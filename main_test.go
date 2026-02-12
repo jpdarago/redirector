@@ -220,7 +220,7 @@ func TestListHandlerEmpty(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
-	if !strings.Contains(rec.Body.String(), "<ul></ul>") {
+	if !strings.Contains(rec.Body.String(), "<ul>\n</ul>") {
 		t.Error("expected empty list")
 	}
 }
