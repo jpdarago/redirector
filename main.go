@@ -65,7 +65,7 @@ func logRoutes(routes map[string]string) {
 	}
 }
 
-func listHandler(routes *atomic.Pointer[map[string]string]) http.HandlerFunc {
+func listHandler(routes *atomic.Pointer[map[string]string], basePath string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		m := *routes.Load()
 		keys := make([]string, 0, len(m))
@@ -80,7 +80,7 @@ func listHandler(routes *atomic.Pointer[map[string]string]) http.HandlerFunc {
 			if !strings.Contains(href, "://") {
 				href = "https://" + href
 			}
-			data = append(data, route{Path: k, Href: href})
+			data = append(data, route{Path: basePath + k, Href: href})
 		}
 
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -143,13 +143,15 @@ func main() {
 		}
 	}()
 
+	basePath := os.Getenv("BASE_PATH")
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /{$}", listHandler(&routes))
+	mux.HandleFunc("GET /{$}", listHandler(&routes, basePath))
 	mux.HandleFunc("GET /", redirectHandler(&routes))
 
 	addr := ":" + port

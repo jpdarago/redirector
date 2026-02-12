@@ -176,7 +176,7 @@ func TestListHandler(t *testing.T) {
 	}
 	routes.Store(&m)
 
-	handler := listHandler(&routes)
+	handler := listHandler(&routes, "")
 	req := httptest.NewRequest("GET", "/", nil)
 	rec := httptest.NewRecorder()
 	handler(rec, req)
@@ -216,7 +216,7 @@ func TestListHandlerEmpty(t *testing.T) {
 	m := map[string]string{}
 	routes.Store(&m)
 
-	handler := listHandler(&routes)
+	handler := listHandler(&routes, "")
 	req := httptest.NewRequest("GET", "/", nil)
 	rec := httptest.NewRecorder()
 	handler(rec, req)
@@ -226,6 +226,27 @@ func TestListHandlerEmpty(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "<ul>\n</ul>") {
 		t.Error("expected empty list")
+	}
+}
+
+func TestListHandlerBasePath(t *testing.T) {
+	var routes atomic.Pointer[map[string]string]
+	m := map[string]string{
+		"/a": "google.com",
+	}
+	routes.Store(&m)
+
+	handler := listHandler(&routes, "/go")
+	req := httptest.NewRequest("GET", "/", nil)
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+
+	body := rec.Body.String()
+	if !strings.Contains(body, `href="/go/a"`) {
+		t.Errorf("expected href with base path /go, got: %s", body)
+	}
+	if !strings.Contains(body, `>/go/a<`) {
+		t.Errorf("expected link text with base path /go, got: %s", body)
 	}
 }
 
