@@ -89,8 +89,8 @@ func TestRedirectHandler(t *testing.T) {
 		wantCode   int
 		wantTarget string
 	}{
-		{"/a", http.StatusMovedPermanently, "https://google.com"},
-		{"/b/c", http.StatusMovedPermanently, "https://example.com/path"},
+		{"/a", http.StatusPermanentRedirect, "https://google.com"},
+		{"/b/c", http.StatusPermanentRedirect, "https://example.com/path"},
 		{"/nope", http.StatusNotFound, ""},
 	}
 
@@ -106,6 +106,10 @@ func TestRedirectHandler(t *testing.T) {
 			got := rec.Header().Get("Location")
 			if got != tt.wantTarget {
 				t.Errorf("%s: Location = %q, want %q", tt.path, got, tt.wantTarget)
+			}
+			cc := rec.Header().Get("Cache-Control")
+			if cc != "max-age=86400" {
+				t.Errorf("%s: Cache-Control = %q, want %q", tt.path, cc, "max-age=86400")
 			}
 		}
 	}
@@ -167,8 +171,8 @@ func TestRedirectHandlerAcceptsValidPaths(t *testing.T) {
 			req := httptest.NewRequest("GET", path, nil)
 			rec := httptest.NewRecorder()
 			handler(rec, req)
-			if rec.Code != http.StatusMovedPermanently {
-				t.Errorf("%s: status = %d, want %d", path, rec.Code, http.StatusMovedPermanently)
+			if rec.Code != http.StatusPermanentRedirect {
+				t.Errorf("%s: status = %d, want %d", path, rec.Code, http.StatusPermanentRedirect)
 			}
 		})
 	}
@@ -318,8 +322,8 @@ func TestRedirectHandlerTrailingSlash(t *testing.T) {
 		wantCode   int
 		wantTarget string
 	}{
-		{"/a/", http.StatusMovedPermanently, "https://google.com"},
-		{"/b/c/", http.StatusMovedPermanently, "https://example.com"},
+		{"/a/", http.StatusPermanentRedirect, "https://google.com"},
+		{"/b/c/", http.StatusPermanentRedirect, "https://example.com"},
 		{"/nope/", http.StatusNotFound, ""},
 	}
 

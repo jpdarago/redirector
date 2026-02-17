@@ -117,8 +117,9 @@ func redirectHandler(routes *atomic.Pointer[map[string]string]) http.HandlerFunc
 		if !strings.Contains(target, "://") {
 			target = "https://" + target
 		}
-		log.Printf("%s %s -> 301 %s", r.Method, r.URL.Path, target)
-		http.Redirect(w, r, target, http.StatusMovedPermanently)
+		log.Printf("%s %s -> 308 %s", r.Method, r.URL.Path, target)
+		w.Header().Set("Cache-Control", "max-age=86400")
+		http.Redirect(w, r, target, http.StatusPermanentRedirect)
 	}
 }
 
