@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -8,6 +9,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+
+	qrcode "github.com/skip2/go-qrcode"
 )
 
 func setupTestDir(t *testing.T, files map[string]string) string {
@@ -358,5 +361,67 @@ func TestRedirectHandlerPreservesScheme(t *testing.T) {
 	got := rec.Header().Get("Location")
 	if got != "http://insecure.com" {
 		t.Errorf("Location = %q, want %q", got, "http://insecure.com")
+	}
+}
+
+func TestRedirectHandlerQR(t *testing.T) {
+	var routes atomic.Pointer[map[string]string]
+	m := map[string]string{
+		"/a": "https://google.com",
+	}
+	routes.Store(&m)
+
+	req := httptest.NewRequest("GET", "/a?qr", nil)
+	rec := httptest.NewRecorder()
+	redirectHandler(&routes)(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	ct := rec.Header().Get("Content-Type")
+	if ct != "image/png" {
+		t.Errorf("Content-Type = %q, want %q", ct, "image/png")
+	}
+	pngMagic := []byte("\x89PNG")
+	if !bytes.HasPrefix(rec.Body.Bytes(), pngMagic) {
+		t.Error("body does not start with PNG magic bytes")
+	}
+}
+
+func TestRedirectHandlerQRNotFound(t *testing.T) {
+	var routes atomic.Pointer[map[string]string]
+	m := map[string]string{}
+	routes.Store(&m)
+
+	req := httptest.NewRequest("GET", "/nope?qr", nil)
+	rec := httptest.NewRecorder()
+	redirectHandler(&routes)(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+}
+
+func TestRedirectHandlerQRPrependsScheme(t *testing.T) {
+	var routes atomic.Pointer[map[string]string]
+	m := map[string]string{
+		"/a": "google.com",
+	}
+	routes.Store(&m)
+
+	req := httptest.NewRequest("GET", "/a?qr", nil)
+	rec := httptest.NewRecorder()
+	redirectHandler(&routes)(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	// Generate expected QR code for the https-prefixed URL and compare
+	expected, err := qrcode.Encode("https://google.com", qrcode.Medium, 256)
+	if err != nil {
+		t.Fatalf("failed to generate expected QR code: %v", err)
+	}
+	if !bytes.Equal(rec.Body.Bytes(), expected) {
+		t.Error("QR code does not match expected output for https://google.com")
 	}
 }

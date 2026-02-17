@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	qrcode "github.com/skip2/go-qrcode"
 )
 
 type route struct {
@@ -116,6 +118,17 @@ func redirectHandler(routes *atomic.Pointer[map[string]string]) http.HandlerFunc
 		}
 		if !strings.Contains(target, "://") {
 			target = "https://" + target
+		}
+		if r.URL.Query().Has("qr") {
+			png, err := qrcode.Encode(target, qrcode.Medium, 256)
+			if err != nil {
+				log.Printf("%s %s?qr -> 500: %v", r.Method, r.URL.Path, err)
+				http.Error(w, "failed to generate QR code", http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "image/png")
+			w.Write(png)
+			return
 		}
 		log.Printf("%s %s -> 308 %s", r.Method, r.URL.Path, target)
 		w.Header().Set("Cache-Control", "max-age=86400")
