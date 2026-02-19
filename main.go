@@ -141,7 +141,7 @@ func redirectHandler(routes *atomic.Pointer[map[string]routeEntry], now func() t
 				return
 			}
 			w.Header().Set("Content-Type", "image/png")
-			w.Write(png)
+			_, _ = w.Write(png)
 			return
 		}
 		log.Printf("%s %s -> 308 %s", r.Method, r.URL.Path, target)
