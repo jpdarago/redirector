@@ -9,9 +9,17 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	qrcode "github.com/skip2/go-qrcode"
 )
+
+var testNow = time.Date(2025, 1, 10, 12, 0, 0, 0, time.UTC)
+
+func recentModTime() time.Time { return testNow.Add(-1 * time.Hour) }
+func oldModTime() time.Time    { return testNow.Add(-7 * 24 * time.Hour) }
+
+func fixedNow() time.Time { return testNow }
 
 func setupTestDir(t *testing.T, files map[string]string) string {
 	t.Helper()
@@ -47,8 +55,8 @@ func TestLoadRoutes(t *testing.T) {
 		got, ok := routes[key]
 		if !ok {
 			t.Errorf("missing route %s", key)
-		} else if got != want {
-			t.Errorf("route %s = %q, want %q", key, got, want)
+		} else if got.Target != want {
+			t.Errorf("route %s = %q, want %q", key, got.Target, want)
 		}
 	}
 	if _, ok := routes["/skip"]; ok {
@@ -72,20 +80,28 @@ func TestLoadRoutesTrimsWhitespace(t *testing.T) {
 		"a.txt": "  google.com  \n",
 	})
 	routes := loadRoutes(dir)
-	if got := routes["/a"]; got != "google.com" {
+	if got := routes["/a"].Target; got != "google.com" {
 		t.Errorf("got %q, want %q", got, "google.com")
 	}
 }
 
+func makeRoutes(m map[string]string, modTime time.Time) map[string]routeEntry {
+	entries := make(map[string]routeEntry, len(m))
+	for k, v := range m {
+		entries[k] = routeEntry{Target: v, ModTime: modTime}
+	}
+	return entries
+}
+
 func TestRedirectHandler(t *testing.T) {
-	var routes atomic.Pointer[map[string]string]
-	m := map[string]string{
+	var routes atomic.Pointer[map[string]routeEntry]
+	m := makeRoutes(map[string]string{
 		"/a":   "google.com",
 		"/b/c": "https://example.com/path",
-	}
+	}, recentModTime())
 	routes.Store(&m)
 
-	handler := redirectHandler(&routes)
+	handler := redirectHandler(&routes, fixedNow)
 
 	tests := []struct {
 		path       string
@@ -118,12 +134,30 @@ func TestRedirectHandler(t *testing.T) {
 	}
 }
 
-func TestRedirectHandlerRejectsInvalidPaths(t *testing.T) {
-	var routes atomic.Pointer[map[string]string]
-	m := map[string]string{}
+func TestRedirectHandlerCacheImmutable(t *testing.T) {
+	var routes atomic.Pointer[map[string]routeEntry]
+	m := makeRoutes(map[string]string{
+		"/a": "google.com",
+	}, oldModTime())
 	routes.Store(&m)
 
-	handler := redirectHandler(&routes)
+	handler := redirectHandler(&routes, fixedNow)
+	req := httptest.NewRequest("GET", "/a", nil)
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+
+	cc := rec.Header().Get("Cache-Control")
+	if cc != "max-age=31536000, immutable" {
+		t.Errorf("Cache-Control = %q, want %q", cc, "max-age=31536000, immutable")
+	}
+}
+
+func TestRedirectHandlerRejectsInvalidPaths(t *testing.T) {
+	var routes atomic.Pointer[map[string]routeEntry]
+	m := makeRoutes(map[string]string{}, recentModTime())
+	routes.Store(&m)
+
+	handler := redirectHandler(&routes, fixedNow)
 
 	tests := []struct {
 		name string
@@ -149,18 +183,18 @@ func TestRedirectHandlerRejectsInvalidPaths(t *testing.T) {
 }
 
 func TestRedirectHandlerAcceptsValidPaths(t *testing.T) {
-	var routes atomic.Pointer[map[string]string]
-	m := map[string]string{
+	var routes atomic.Pointer[map[string]routeEntry]
+	m := makeRoutes(map[string]string{
 		"/go/github":       "github.com",
 		"/go/my-repo":      "github.com/my-repo",
 		"/go/my_repo":      "github.com/my_repo",
 		"/go/ABC-123_test": "example.com",
 		"/a/b/c":           "example.com",
 		"/go/todo":         "example.com/todo",
-	}
+	}, recentModTime())
 	routes.Store(&m)
 
-	handler := redirectHandler(&routes)
+	handler := redirectHandler(&routes, fixedNow)
 
 	paths := make([]string, 0, len(m)+1)
 	for p := range m {
@@ -182,12 +216,12 @@ func TestRedirectHandlerAcceptsValidPaths(t *testing.T) {
 }
 
 func TestListHandler(t *testing.T) {
-	var routes atomic.Pointer[map[string]string]
-	m := map[string]string{
+	var routes atomic.Pointer[map[string]routeEntry]
+	m := makeRoutes(map[string]string{
 		"/b":   "google.com",
 		"/a":   "https://example.com",
 		"/c/d": "github.com/foo",
-	}
+	}, recentModTime())
 	routes.Store(&m)
 
 	handler := listHandler(&routes, "")
@@ -226,8 +260,8 @@ func TestListHandler(t *testing.T) {
 }
 
 func TestListHandlerEmpty(t *testing.T) {
-	var routes atomic.Pointer[map[string]string]
-	m := map[string]string{}
+	var routes atomic.Pointer[map[string]routeEntry]
+	m := makeRoutes(map[string]string{}, recentModTime())
 	routes.Store(&m)
 
 	handler := listHandler(&routes, "")
@@ -244,10 +278,10 @@ func TestListHandlerEmpty(t *testing.T) {
 }
 
 func TestListHandlerBasePath(t *testing.T) {
-	var routes atomic.Pointer[map[string]string]
-	m := map[string]string{
+	var routes atomic.Pointer[map[string]routeEntry]
+	m := makeRoutes(map[string]string{
 		"/a": "google.com",
-	}
+	}, recentModTime())
 	routes.Store(&m)
 
 	handler := listHandler(&routes, "/go")
@@ -282,8 +316,8 @@ func TestLoadRoutesIndexFile(t *testing.T) {
 		got, ok := routes[key]
 		if !ok {
 			t.Errorf("missing route %s", key)
-		} else if got != want {
-			t.Errorf("route %s = %q, want %q", key, got, want)
+		} else if got.Target != want {
+			t.Errorf("route %s = %q, want %q", key, got.Target, want)
 		}
 	}
 	if _, ok := routes["/todo/_index"]; ok {
@@ -311,14 +345,14 @@ func TestLoadRoutesRootIndexSkipped(t *testing.T) {
 }
 
 func TestRedirectHandlerTrailingSlash(t *testing.T) {
-	var routes atomic.Pointer[map[string]string]
-	m := map[string]string{
+	var routes atomic.Pointer[map[string]routeEntry]
+	m := makeRoutes(map[string]string{
 		"/a":   "google.com",
 		"/b/c": "example.com",
-	}
+	}, recentModTime())
 	routes.Store(&m)
 
-	handler := redirectHandler(&routes)
+	handler := redirectHandler(&routes, fixedNow)
 
 	tests := []struct {
 		path       string
@@ -348,15 +382,15 @@ func TestRedirectHandlerTrailingSlash(t *testing.T) {
 }
 
 func TestRedirectHandlerPreservesScheme(t *testing.T) {
-	var routes atomic.Pointer[map[string]string]
-	m := map[string]string{
+	var routes atomic.Pointer[map[string]routeEntry]
+	m := makeRoutes(map[string]string{
 		"/a": "http://insecure.com",
-	}
+	}, recentModTime())
 	routes.Store(&m)
 
 	req := httptest.NewRequest("GET", "/a", nil)
 	rec := httptest.NewRecorder()
-	redirectHandler(&routes)(rec, req)
+	redirectHandler(&routes, fixedNow)(rec, req)
 
 	got := rec.Header().Get("Location")
 	if got != "http://insecure.com" {
@@ -365,15 +399,15 @@ func TestRedirectHandlerPreservesScheme(t *testing.T) {
 }
 
 func TestRedirectHandlerQR(t *testing.T) {
-	var routes atomic.Pointer[map[string]string]
-	m := map[string]string{
+	var routes atomic.Pointer[map[string]routeEntry]
+	m := makeRoutes(map[string]string{
 		"/a": "https://google.com",
-	}
+	}, recentModTime())
 	routes.Store(&m)
 
 	req := httptest.NewRequest("GET", "/a?qr", nil)
 	rec := httptest.NewRecorder()
-	redirectHandler(&routes)(rec, req)
+	redirectHandler(&routes, fixedNow)(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
@@ -389,13 +423,13 @@ func TestRedirectHandlerQR(t *testing.T) {
 }
 
 func TestRedirectHandlerQRNotFound(t *testing.T) {
-	var routes atomic.Pointer[map[string]string]
-	m := map[string]string{}
+	var routes atomic.Pointer[map[string]routeEntry]
+	m := makeRoutes(map[string]string{}, recentModTime())
 	routes.Store(&m)
 
 	req := httptest.NewRequest("GET", "/nope?qr", nil)
 	rec := httptest.NewRecorder()
-	redirectHandler(&routes)(rec, req)
+	redirectHandler(&routes, fixedNow)(rec, req)
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
@@ -403,15 +437,15 @@ func TestRedirectHandlerQRNotFound(t *testing.T) {
 }
 
 func TestRedirectHandlerQRPrependsScheme(t *testing.T) {
-	var routes atomic.Pointer[map[string]string]
-	m := map[string]string{
+	var routes atomic.Pointer[map[string]routeEntry]
+	m := makeRoutes(map[string]string{
 		"/a": "google.com",
-	}
+	}, recentModTime())
 	routes.Store(&m)
 
 	req := httptest.NewRequest("GET", "/a?qr", nil)
 	rec := httptest.NewRecorder()
-	redirectHandler(&routes)(rec, req)
+	redirectHandler(&routes, fixedNow)(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)

@@ -15,6 +15,11 @@ import (
 	qrcode "github.com/skip2/go-qrcode"
 )
 
+type routeEntry struct {
+	Target  string
+	ModTime time.Time
+}
+
 type route struct {
 	Path string
 	Href string
@@ -35,8 +40,8 @@ var listTmpl = template.Must(template.New("list").Parse(listHTML))
 
 var validPath = regexp.MustCompile(`^/[a-zA-Z0-9_-]+(/[a-zA-Z0-9_-]+)*/?$`)
 
-func loadRoutes(dir string) map[string]string {
-	routes := make(map[string]string)
+func loadRoutes(dir string) map[string]routeEntry {
+	routes := make(map[string]routeEntry)
 	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			log.Printf("walk error: %s: %v", path, err)
@@ -46,6 +51,11 @@ func loadRoutes(dir string) map[string]string {
 			return nil
 		}
 		if filepath.Ext(path) != ".txt" {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			log.Printf("stat error: %s: %v", path, err)
 			return nil
 		}
 		data, err := os.ReadFile(path)
@@ -64,19 +74,22 @@ func loadRoutes(dir string) map[string]string {
 			name = parent
 		}
 		key := "/" + name
-		routes[key] = strings.TrimSpace(string(data))
+		routes[key] = routeEntry{
+			Target:  strings.TrimSpace(string(data)),
+			ModTime: info.ModTime(),
+		}
 		return nil
 	})
 	return routes
 }
 
-func logRoutes(routes map[string]string) {
-	for key, target := range routes {
-		log.Printf("  %s -> %s", key, target)
+func logRoutes(routes map[string]routeEntry) {
+	for key, entry := range routes {
+		log.Printf("  %s -> %s", key, entry.Target)
 	}
 }
 
-func listHandler(routes *atomic.Pointer[map[string]string], basePath string) http.HandlerFunc {
+func listHandler(routes *atomic.Pointer[map[string]routeEntry], basePath string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		m := *routes.Load()
 		keys := make([]string, 0, len(m))
@@ -87,7 +100,7 @@ func listHandler(routes *atomic.Pointer[map[string]string], basePath string) htt
 
 		data := make([]route, 0, len(keys))
 		for _, k := range keys {
-			href := m[k]
+			href := m[k].Target
 			if !strings.Contains(href, "://") {
 				href = "https://" + href
 			}
@@ -101,7 +114,7 @@ func listHandler(routes *atomic.Pointer[map[string]string], basePath string) htt
 	}
 }
 
-func redirectHandler(routes *atomic.Pointer[map[string]string]) http.HandlerFunc {
+func redirectHandler(routes *atomic.Pointer[map[string]routeEntry], now func() time.Time) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if len(r.URL.Path) > 64 || !validPath.MatchString(r.URL.Path) {
 			log.Printf("%s %s -> 400 invalid path", r.Method, r.URL.Path)
@@ -110,12 +123,13 @@ func redirectHandler(routes *atomic.Pointer[map[string]string]) http.HandlerFunc
 		}
 		m := *routes.Load()
 		lookupPath := strings.TrimRight(r.URL.Path, "/")
-		target, ok := m[lookupPath]
+		entry, ok := m[lookupPath]
 		if !ok {
 			log.Printf("%s %s -> 404", r.Method, r.URL.Path)
 			http.NotFound(w, r)
 			return
 		}
+		target := entry.Target
 		if !strings.Contains(target, "://") {
 			target = "https://" + target
 		}
@@ -131,7 +145,11 @@ func redirectHandler(routes *atomic.Pointer[map[string]string]) http.HandlerFunc
 			return
 		}
 		log.Printf("%s %s -> 308 %s", r.Method, r.URL.Path, target)
-		w.Header().Set("Cache-Control", "max-age=86400")
+		if now().Sub(entry.ModTime) > 3*24*time.Hour {
+			w.Header().Set("Cache-Control", "max-age=31536000, immutable")
+		} else {
+			w.Header().Set("Cache-Control", "max-age=86400")
+		}
 		http.Redirect(w, r, target, http.StatusPermanentRedirect)
 	}
 }
@@ -147,7 +165,7 @@ func main() {
 		log.Fatalf("REDIRECT_DIR %q is not a valid directory", dir)
 	}
 
-	var routes atomic.Pointer[map[string]string]
+	var routes atomic.Pointer[map[string]routeEntry]
 	initial := loadRoutes(dir)
 	routes.Store(&initial)
 	log.Printf("loaded %d routes from %s", len(initial), dir)
@@ -176,7 +194,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", listHandler(&routes, basePath))
-	mux.HandleFunc("GET /", redirectHandler(&routes))
+	mux.HandleFunc("GET /", redirectHandler(&routes, time.Now))
 
 	addr := ":" + port
 	log.Printf("listening on %s", addr)
