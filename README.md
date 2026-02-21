@@ -213,6 +213,30 @@ Save the private key to a temporary file and run through these checks. The `SSH_
    gh secret list | grep DEPLOY_SSH_KEY
    ```
 
+## Browser setup
+
+You can set up your browser so that typing `go <shortcut>` in the address bar navigates directly to `go.jpdarago.com/<shortcut>`.
+
+### Chrome
+
+Go to **Settings → Search engine → Manage search engines → Site search → Add**:
+
+- **Name**: `Redirector`
+- **Shortcut**: `go`
+- **URL**: `https://go.jpdarago.com/%s`
+
+Type `go`, press **Tab**, type a shortcut name (e.g. `github`), and hit **Enter**.
+
+### Firefox
+
+Open the Bookmarks Library with **Ctrl+Shift+O**, then right-click → **New Bookmark...**:
+
+- **Name**: `Redirector`
+- **URL**: `https://go.jpdarago.com/%s`
+- **Keyword**: `go`
+
+Type `go github` in the address bar and hit **Enter**.
+
 ## Development
 
 Requires [devenv](https://devenv.sh/):
