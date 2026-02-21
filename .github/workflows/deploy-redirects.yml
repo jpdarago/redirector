@@ -1,0 +1,24 @@
+name: Deploy Redirects
+
+on:
+  push:
+    branches: [main]
+    paths: [redirects/**]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy via rsync
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || 'jpdarago.com' }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER || 'jpdarago' }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+          rsync -avz --delete -e "ssh -i ~/.ssh/deploy_key" redirects/ "${DEPLOY_USER}@${DEPLOY_HOST}:/srv/redirects/"

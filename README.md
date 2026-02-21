@@ -132,6 +132,47 @@ Test and reload nginx:
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
+### Syncing redirects from GitHub
+
+Redirect `.txt` files live in the `redirects/` directory of this repository. A GitHub Actions workflow automatically rsyncs them to the server on every push to `main` that changes files under `redirects/`.
+
+**Importing existing redirects from the server:**
+
+```sh
+rsync -avz jpdarago@jpdarago.com:/srv/redirects/ redirects/
+```
+
+This copies all `.txt` files from the server into the `redirects/` directory. Review the result, commit, and push to make the repo the source of truth going forward.
+
+**Server setup:**
+
+1. Generate a dedicated SSH key pair (no passphrase):
+
+   ```sh
+   ssh-keygen -t ed25519 -f deploy_redirects -N ""
+   ```
+
+2. Install `rrsync` on the server. On Debian/Ubuntu it ships with the `rsync` package at `/usr/bin/rrsync`. On other distros you may need to install it separately.
+
+3. Add the **public** key to `~jpdarago/.ssh/authorized_keys` with restrictions so it can only rsync into `/srv/redirects`:
+
+   ```
+   command="/usr/bin/rrsync /srv/redirects",restrict ssh-ed25519 AAAA... github-actions-deploy
+   ```
+
+   This prevents shell access, port forwarding, and any command other than rsync into the specified directory.
+
+4. Add the **private** key as a GitHub repository secret named `DEPLOY_SSH_KEY`.
+
+5. Ensure `/srv/redirects` is owned by `jpdarago` and writable:
+
+   ```sh
+   sudo chown jpdarago:jpdarago /srv/redirects
+   sudo chmod 755 /srv/redirects
+   ```
+
+Optionally set `DEPLOY_HOST` and `DEPLOY_USER` secrets to override the defaults (`jpdarago.com` and `jpdarago`).
+
 ## Development
 
 Requires [devenv](https://devenv.sh/):
