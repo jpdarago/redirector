@@ -139,7 +139,7 @@ Redirect `.txt` files live in the `redirects/` directory of this repository. A G
 **Importing existing redirects from the server:**
 
 ```sh
-rsync -avz jpdarago@jpdarago.com:/srv/redirects/ redirects/
+rsync -avz jpdarago@jpdarago.com:/ redirects/
 ```
 
 This copies all `.txt` files from the server into the `redirects/` directory. Review the result, commit, and push to make the repo the source of truth going forward.
@@ -196,7 +196,7 @@ Save the private key to a temporary file and run through these checks. The `SSH_
 2. Test a dry-run rsync to verify permissions:
 
    ```sh
-   SSH_AUTH_SOCK= rsync -avz --dry-run -e "ssh -i /path/to/deploy_key -o IdentitiesOnly=yes" redirects/ jpdarago@jpdarago.com:/srv/redirects/
+   SSH_AUTH_SOCK= rsync -avz --dry-run -e "ssh -i /path/to/deploy_key -o IdentitiesOnly=yes" redirects/ jpdarago@jpdarago.com:/
    ```
 
    You should see the list of files that would be transferred with no permission errors.
@@ -204,7 +204,7 @@ Save the private key to a temporary file and run through these checks. The `SSH_
 3. Do an actual rsync to confirm it works end to end:
 
    ```sh
-   SSH_AUTH_SOCK= rsync -avz -e "ssh -i /path/to/deploy_key -o IdentitiesOnly=yes" redirects/ jpdarago@jpdarago.com:/srv/redirects/
+   SSH_AUTH_SOCK= rsync -avz -e "ssh -i /path/to/deploy_key -o IdentitiesOnly=yes" redirects/ jpdarago@jpdarago.com:/
    ```
 
 ## Development

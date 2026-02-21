@@ -21,4 +21,4 @@ jobs:
           echo "$SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
-          rsync -avz --delete -e "ssh -i ~/.ssh/deploy_key" redirects/ "${DEPLOY_USER}@${DEPLOY_HOST}:/srv/redirects/"
+          rsync -avz --delete -e "ssh -i ~/.ssh/deploy_key" redirects/ "${DEPLOY_USER}@${DEPLOY_HOST}:/"
