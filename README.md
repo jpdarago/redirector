@@ -181,6 +181,40 @@ This copies all `.txt` files from the server into the `redirects/` directory. Re
 
 Optionally set `DEPLOY_HOST` and `DEPLOY_USER` secrets to override the defaults (`jpdarago.com` and `jpdarago`).
 
+**Verifying the setup locally before using the workflow:**
+
+Save the private key to a temporary file and run through these checks:
+
+1. Verify SSH connectivity with the restricted key:
+
+   ```sh
+   ssh -i /path/to/deploy_key jpdarago@jpdarago.com echo "SSH works"
+   ```
+
+   This should fail or print an `rrsync` error (not a shell prompt) — that confirms the key is restricted.
+
+2. Test a dry-run rsync to verify permissions:
+
+   ```sh
+   rsync -avz --dry-run -e "ssh -i /path/to/deploy_key" redirects/ jpdarago@jpdarago.com:/srv/redirects/
+   ```
+
+   You should see the list of files that would be transferred with no permission errors.
+
+3. Do an actual rsync to confirm it works end to end:
+
+   ```sh
+   rsync -avz -e "ssh -i /path/to/deploy_key" redirects/ jpdarago@jpdarago.com:/srv/redirects/
+   ```
+
+4. Verify the restricted key cannot run arbitrary commands:
+
+   ```sh
+   ssh -i /path/to/deploy_key jpdarago@jpdarago.com ls /
+   ```
+
+   This should be rejected by `rrsync`.
+
 ## Development
 
 Requires [devenv](https://devenv.sh/):
