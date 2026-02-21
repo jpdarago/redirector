@@ -132,6 +132,87 @@ Test and reload nginx:
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
+### Syncing redirects from GitHub
+
+Redirect `.txt` files live in the `redirects/` directory of this repository. A GitHub Actions workflow automatically rsyncs them to the server on every push to `main` that changes files under `redirects/`.
+
+**Importing existing redirects from the server:**
+
+```sh
+rsync -avz jpdarago@jpdarago.com:/ redirects/
+```
+
+This copies all `.txt` files from the server into the `redirects/` directory. Review the result, commit, and push to make the repo the source of truth going forward.
+
+**Server setup:**
+
+1. Generate a dedicated Ed25519 SSH key pair. Either:
+
+   - **Bitwarden**: Use the SSH key generator in Bitwarden to create an Ed25519 key and export the public/private keys.
+   - **ssh-keygen**:
+     ```sh
+     ssh-keygen -t ed25519 -f deploy_redirects -N ""
+     ```
+
+2. Ensure `rrsync` is installed on the server. Check with:
+
+   ```sh
+   which rrsync
+   ```
+
+   On Debian/Ubuntu it ships with the `rsync` package at `/usr/bin/rrsync`. If missing, install `rsync` (`sudo apt install rsync`). On other distros you may need to install it separately.
+
+3. Add the **public** key to `~jpdarago/.ssh/authorized_keys` with restrictions so it can only rsync into `/srv/redirects`:
+
+   ```
+   command="/usr/bin/rrsync /srv/redirects",restrict ssh-ed25519 AAAA... github-actions-deploy
+   ```
+
+   This prevents shell access, port forwarding, and any command other than rsync into the specified directory.
+
+4. Add the **private** key as a GitHub repository secret named `DEPLOY_SSH_KEY`.
+
+5. Ensure `/srv/redirects` is owned by `jpdarago` and writable:
+
+   ```sh
+   sudo chown jpdarago:jpdarago /srv/redirects
+   sudo chmod 750 /srv/redirects
+   ```
+
+Optionally set `DEPLOY_HOST` and `DEPLOY_USER` secrets to override the defaults (`jpdarago.com` and `jpdarago`).
+
+**Verifying the setup locally before using the workflow:**
+
+Save the private key to a temporary file and run through these checks. The `SSH_AUTH_SOCK=` and `-o IdentitiesOnly=yes` flags ensure your SSH agent doesn't offer a different key that bypasses the `rrsync` restriction:
+
+1. Verify the restricted key cannot run arbitrary commands:
+
+   ```sh
+   SSH_AUTH_SOCK= ssh -i /path/to/deploy_key -o IdentitiesOnly=yes jpdarago@jpdarago.com ls /
+   ```
+
+   This should print an `rrsync` error like `SSH_ORIGINAL_COMMAND does not run rsync` — that confirms the key is restricted.
+
+2. Test a dry-run rsync to verify permissions:
+
+   ```sh
+   SSH_AUTH_SOCK= rsync -avz --dry-run -e "ssh -i /path/to/deploy_key -o IdentitiesOnly=yes" redirects/ jpdarago@jpdarago.com:/
+   ```
+
+   You should see the list of files that would be transferred with no permission errors.
+
+3. Do an actual rsync to confirm it works end to end:
+
+   ```sh
+   SSH_AUTH_SOCK= rsync -avz -e "ssh -i /path/to/deploy_key -o IdentitiesOnly=yes" redirects/ jpdarago@jpdarago.com:/
+   ```
+
+4. Verify the `DEPLOY_SSH_KEY` secret exists in GitHub:
+
+   ```sh
+   gh secret list | grep DEPLOY_SSH_KEY
+   ```
+
 ## Development
 
 Requires [devenv](https://devenv.sh/):
