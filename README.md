@@ -183,20 +183,20 @@ Optionally set `DEPLOY_HOST` and `DEPLOY_USER` secrets to override the defaults 
 
 **Verifying the setup locally before using the workflow:**
 
-Save the private key to a temporary file and run through these checks:
+Save the private key to a temporary file and run through these checks. The `SSH_AUTH_SOCK=` and `-o IdentitiesOnly=yes` flags ensure your SSH agent doesn't offer a different key that bypasses the `rrsync` restriction:
 
-1. Verify SSH connectivity with the restricted key:
+1. Verify the restricted key cannot run arbitrary commands:
 
    ```sh
-   ssh -i /path/to/deploy_key jpdarago@jpdarago.com echo "SSH works"
+   SSH_AUTH_SOCK= ssh -i /path/to/deploy_key -o IdentitiesOnly=yes jpdarago@jpdarago.com ls /
    ```
 
-   This should fail or print an `rrsync` error (not a shell prompt) — that confirms the key is restricted.
+   This should print an `rrsync` error like `SSH_ORIGINAL_COMMAND does not run rsync` — that confirms the key is restricted.
 
 2. Test a dry-run rsync to verify permissions:
 
    ```sh
-   rsync -avz --dry-run -e "ssh -i /path/to/deploy_key" redirects/ jpdarago@jpdarago.com:/srv/redirects/
+   SSH_AUTH_SOCK= rsync -avz --dry-run -e "ssh -i /path/to/deploy_key -o IdentitiesOnly=yes" redirects/ jpdarago@jpdarago.com:/srv/redirects/
    ```
 
    You should see the list of files that would be transferred with no permission errors.
@@ -204,16 +204,8 @@ Save the private key to a temporary file and run through these checks:
 3. Do an actual rsync to confirm it works end to end:
 
    ```sh
-   rsync -avz -e "ssh -i /path/to/deploy_key" redirects/ jpdarago@jpdarago.com:/srv/redirects/
+   SSH_AUTH_SOCK= rsync -avz -e "ssh -i /path/to/deploy_key -o IdentitiesOnly=yes" redirects/ jpdarago@jpdarago.com:/srv/redirects/
    ```
-
-4. Verify the restricted key cannot run arbitrary commands:
-
-   ```sh
-   ssh -i /path/to/deploy_key jpdarago@jpdarago.com ls /
-   ```
-
-   This should be rejected by `rrsync`.
 
 ## Development
 
