@@ -176,7 +176,7 @@ This copies all `.txt` files from the server into the `redirects/` directory. Re
 
    ```sh
    sudo chown jpdarago:jpdarago /srv/redirects
-   sudo chmod 755 /srv/redirects
+   sudo chmod 750 /srv/redirects
    ```
 
 Optionally set `DEPLOY_HOST` and `DEPLOY_USER` secrets to override the defaults (`jpdarago.com` and `jpdarago`).
