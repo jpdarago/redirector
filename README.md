@@ -154,7 +154,13 @@ This copies all `.txt` files from the server into the `redirects/` directory. Re
      ssh-keygen -t ed25519 -f deploy_redirects -N ""
      ```
 
-2. Install `rrsync` on the server. On Debian/Ubuntu it ships with the `rsync` package at `/usr/bin/rrsync`. On other distros you may need to install it separately.
+2. Ensure `rrsync` is installed on the server. Check with:
+
+   ```sh
+   which rrsync
+   ```
+
+   On Debian/Ubuntu it ships with the `rsync` package at `/usr/bin/rrsync`. If missing, install `rsync` (`sudo apt install rsync`). On other distros you may need to install it separately.
 
 3. Add the **public** key to `~jpdarago/.ssh/authorized_keys` with restrictions so it can only rsync into `/srv/redirects`:
 
