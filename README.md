@@ -15,9 +15,20 @@ Given a directory like:
 ├── e/
 │   └── f/
 │       └── g.txt  # contains "youtube.com"
+├── books/
+│   └── protein.txt
 └── todo/
     └── _index.txt # contains "todoist.com"
 ```
+
+Files contain the redirect target URL, optionally preceded by comment lines starting with `#`:
+
+```
+# Lyle McDonald - _The Protein Book_
+https://jpdarago.com/books/link-to-the-book.pdf
+```
+
+Comments are ignored for redirection but displayed as descriptions on the listing page, rendered as Markdown.
 
 The server produces these redirects:
 
@@ -29,6 +40,7 @@ The server produces these redirects:
 | `GET /e/f/g` | `https://youtube.com` |
 | `GET /todo` | `https://todoist.com` |
 | `GET /todo/` | `https://todoist.com` |
+| `GET /books/protein` | `https://jpdarago.com/books/link-to-the-book.pdf` |
 | anything else | 404 |
 
 URLs without a scheme get `https://` prepended automatically. URLs that already contain `://` are used as-is.
