@@ -207,6 +207,12 @@ Save the private key to a temporary file and run through these checks. The `SSH_
    SSH_AUTH_SOCK= rsync -avz -e "ssh -i /path/to/deploy_key -o IdentitiesOnly=yes" redirects/ jpdarago@jpdarago.com:/
    ```
 
+4. Verify the `DEPLOY_SSH_KEY` secret exists in GitHub:
+
+   ```sh
+   gh secret list | grep DEPLOY_SSH_KEY
+   ```
+
 ## Development
 
 Requires [devenv](https://devenv.sh/):
