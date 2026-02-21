@@ -1,1 +1,2 @@
+# Coinbase Bitcoin to USD converter utility
 https://www.coinbase.com/en-ar/converter/btc/usd
