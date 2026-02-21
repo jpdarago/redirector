@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"html/template"
 	"log"
 	"net/http"
@@ -13,16 +14,19 @@ import (
 	"time"
 
 	qrcode "github.com/skip2/go-qrcode"
+	"github.com/yuin/goldmark"
 )
 
 type routeEntry struct {
 	Target  string
+	Comment string
 	ModTime time.Time
 }
 
 type route struct {
-	Path string
-	Href string
+	Path    string
+	Href    string
+	Comment template.HTML
 }
 
 const listHTML = `<!DOCTYPE html>
@@ -31,7 +35,7 @@ const listHTML = `<!DOCTYPE html>
 <body>
 <h1>Available Redirects</h1>
 <ul>{{range .}}
-<li><a href="{{.Path}}">{{.Path}}</a> &rarr; {{.Href}}</li>{{end}}
+<li><a href="{{.Path}}">{{.Path}}</a> &rarr; {{.Href}}{{if .Comment}}<br>{{.Comment}}{{end}}</li>{{end}}
 </ul>
 </body>
 </html>`
@@ -39,6 +43,31 @@ const listHTML = `<!DOCTYPE html>
 var listTmpl = template.Must(template.New("list").Parse(listHTML))
 
 var validPath = regexp.MustCompile(`^/[a-zA-Z0-9_-]+(/[a-zA-Z0-9_-]+)*/?$`)
+
+// parseRouteFile splits a route file into target URL and comment.
+// Lines starting with # are comments; the first non-comment non-empty line is the target.
+func parseRouteFile(content string) (target, comment string) {
+	var commentLines []string
+	for _, line := range strings.Split(content, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "#") {
+			commentLines = append(commentLines, strings.TrimSpace(strings.TrimPrefix(line, "#")))
+		} else if line != "" && target == "" {
+			target = line
+		}
+	}
+	comment = strings.Join(commentLines, "\n")
+	return target, comment
+}
+
+func renderMarkdown(src string) template.HTML {
+	var buf bytes.Buffer
+	if err := goldmark.Convert([]byte(src), &buf); err != nil {
+		log.Printf("markdown error: %v", err)
+		return template.HTML(template.HTMLEscapeString(src))
+	}
+	return template.HTML(buf.String())
+}
 
 func loadRoutes(dir string) map[string]routeEntry {
 	routes := make(map[string]routeEntry)
@@ -73,9 +102,11 @@ func loadRoutes(dir string) map[string]routeEntry {
 			}
 			name = parent
 		}
+		target, comment := parseRouteFile(string(data))
 		key := "/" + name
 		routes[key] = routeEntry{
-			Target:  strings.TrimSpace(string(data)),
+			Target:  target,
+			Comment: comment,
 			ModTime: info.ModTime(),
 		}
 		return nil
@@ -100,11 +131,16 @@ func listHandler(routes *atomic.Pointer[map[string]routeEntry], basePath string)
 
 		data := make([]route, 0, len(keys))
 		for _, k := range keys {
-			href := m[k].Target
+			entry := m[k]
+			href := entry.Target
 			if !strings.Contains(href, "://") {
 				href = "https://" + href
 			}
-			data = append(data, route{Path: basePath + k, Href: href})
+			var comment template.HTML
+			if entry.Comment != "" {
+				comment = renderMarkdown(entry.Comment)
+			}
+			data = append(data, route{Path: basePath + k, Href: href, Comment: comment})
 		}
 
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")

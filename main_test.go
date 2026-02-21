@@ -436,6 +436,125 @@ func TestRedirectHandlerQRNotFound(t *testing.T) {
 	}
 }
 
+func TestParseRouteFile(t *testing.T) {
+	tests := []struct {
+		name        string
+		content     string
+		wantTarget  string
+		wantComment string
+	}{
+		{
+			name:        "url only",
+			content:     "https://google.com\n",
+			wantTarget:  "https://google.com",
+			wantComment: "",
+		},
+		{
+			name:        "comment and url",
+			content:     "# Lyle McDonald - _The Protein Book_\nhttps://jpdarago.com/books/link-to-the-book.pdf\n",
+			wantTarget:  "https://jpdarago.com/books/link-to-the-book.pdf",
+			wantComment: "Lyle McDonald - _The Protein Book_",
+		},
+		{
+			name:        "multiple comment lines",
+			content:     "# Line one\n# Line two\nhttps://example.com\n",
+			wantTarget:  "https://example.com",
+			wantComment: "Line one\nLine two",
+		},
+		{
+			name:        "comment after url ignored for target",
+			content:     "# A comment\nhttps://example.com\n# trailing comment\n",
+			wantTarget:  "https://example.com",
+			wantComment: "A comment\ntrailing comment",
+		},
+		{
+			name:        "no newline at end",
+			content:     "# Comment\nhttps://example.com",
+			wantTarget:  "https://example.com",
+			wantComment: "Comment",
+		},
+		{
+			name:        "empty file",
+			content:     "",
+			wantTarget:  "",
+			wantComment: "",
+		},
+		{
+			name:        "only comments",
+			content:     "# Just a comment\n",
+			wantTarget:  "",
+			wantComment: "Just a comment",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			target, comment := parseRouteFile(tt.content)
+			if target != tt.wantTarget {
+				t.Errorf("target = %q, want %q", target, tt.wantTarget)
+			}
+			if comment != tt.wantComment {
+				t.Errorf("comment = %q, want %q", comment, tt.wantComment)
+			}
+		})
+	}
+}
+
+func TestLoadRoutesWithComments(t *testing.T) {
+	dir := setupTestDir(t, map[string]string{
+		"a.txt": "# A book title\nhttps://example.com/book\n",
+		"b.txt": "google.com\n",
+	})
+
+	routes := loadRoutes(dir)
+
+	if got := routes["/a"].Target; got != "https://example.com/book" {
+		t.Errorf("target = %q, want %q", got, "https://example.com/book")
+	}
+	if got := routes["/a"].Comment; got != "A book title" {
+		t.Errorf("comment = %q, want %q", got, "A book title")
+	}
+	if got := routes["/b"].Target; got != "google.com" {
+		t.Errorf("target = %q, want %q", got, "google.com")
+	}
+	if got := routes["/b"].Comment; got != "" {
+		t.Errorf("comment = %q, want empty", got)
+	}
+}
+
+func TestListHandlerWithComments(t *testing.T) {
+	var routes atomic.Pointer[map[string]routeEntry]
+	m := map[string]routeEntry{
+		"/a": {Target: "google.com", Comment: "A _great_ search engine", ModTime: recentModTime()},
+		"/b": {Target: "example.com", Comment: "", ModTime: recentModTime()},
+	}
+	routes.Store(&m)
+
+	handler := listHandler(&routes, "")
+	req := httptest.NewRequest("GET", "/", nil)
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+
+	body := rec.Body.String()
+	// Comment for /a should be rendered as Markdown HTML (italic)
+	if !strings.Contains(body, "<em>great</em>") {
+		t.Errorf("expected Markdown-rendered comment with <em>, got: %s", body)
+	}
+	// /b should not have a <br> since it has no comment
+	// Find the /b line and check it doesn't have <br>
+	bIdx := strings.Index(body, `>/b<`)
+	if bIdx == -1 {
+		t.Fatal("missing /b in body")
+	}
+	// Get the <li> containing /b
+	liStart := strings.LastIndex(body[:bIdx], "<li>")
+	liEnd := strings.Index(body[bIdx:], "</li>")
+	bLine := body[liStart : bIdx+liEnd+len("</li>")]
+	if strings.Contains(bLine, "<br>") {
+		t.Errorf("expected no <br> for route without comment, got: %s", bLine)
+	}
+}
+
 func TestRedirectHandlerQRPrependsScheme(t *testing.T) {
 	var routes atomic.Pointer[map[string]routeEntry]
 	m := makeRoutes(map[string]string{
