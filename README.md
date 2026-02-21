@@ -146,11 +146,13 @@ This copies all `.txt` files from the server into the `redirects/` directory. Re
 
 **Server setup:**
 
-1. Generate a dedicated SSH key pair (no passphrase):
+1. Generate a dedicated Ed25519 SSH key pair. Either:
 
-   ```sh
-   ssh-keygen -t ed25519 -f deploy_redirects -N ""
-   ```
+   - **Bitwarden**: Use the SSH key generator in Bitwarden to create an Ed25519 key and export the public/private keys.
+   - **ssh-keygen**:
+     ```sh
+     ssh-keygen -t ed25519 -f deploy_redirects -N ""
+     ```
 
 2. Install `rrsync` on the server. On Debian/Ubuntu it ships with the `rsync` package at `/usr/bin/rrsync`. On other distros you may need to install it separately.
 
