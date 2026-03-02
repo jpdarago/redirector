@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"flag"
 	"html/template"
 	"log"
 	"net/http"
@@ -191,6 +192,9 @@ func redirectHandler(routes *atomic.Pointer[map[string]routeEntry], now func() t
 }
 
 func main() {
+	check := flag.Bool("check", false, "verify configuration and exit")
+	flag.Parse()
+
 	dir := os.Getenv("REDIRECT_DIR")
 	if dir == "" {
 		log.Fatal("REDIRECT_DIR is required")
@@ -206,6 +210,11 @@ func main() {
 	routes.Store(&initial)
 	log.Printf("loaded %d routes from %s", len(initial), dir)
 	logRoutes(initial)
+
+	if *check {
+		log.Print("check passed")
+		return
+	}
 
 	go func() {
 		prev := len(initial)
