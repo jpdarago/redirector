@@ -31,6 +31,7 @@ jobs:
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
         run: |
           go build -o redirector-${{ matrix.goos }}-${{ matrix.goarch }} .
       - uses: actions/upload-artifact@v4
