@@ -20,3 +20,5 @@ https://jpdarago.com/books/link-to-the-book.pdf
 ```
 
 - [x] Push the redirect links from a folder in Github. (Issue #7) I can grant an SSH key access to the `/usr/srv/redirects` folder so Github Actions uses that key and pushed it to the directory. The command should be `rsync`. The SSH key should only have permissions to write to that folder. The folder structure of the repo should be preserved. Update the Readme with setup instructions for this for me to do to set up the permissions on my server.
+
+- [ ] Add an endpoint to download the redirects folder as a `tar.gz` file for backup purposes.
